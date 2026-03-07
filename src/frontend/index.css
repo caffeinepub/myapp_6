@@ -1,0 +1,229 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Fonts ──────────────────────────────────────────────────────────── */
+@font-face {
+  font-family: "Bricolage Grotesque";
+  src: url("/assets/fonts/BricolageGrotesque[opsz,wdth,wght].woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Sora";
+  src: url("/assets/fonts/Sora[wght].woff2") format("woff2");
+  font-weight: 100 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Geist Mono";
+  src: url("/assets/fonts/GeistMono[wght].woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* ── Design Tokens ──────────────────────────────────────────────────── */
+@layer base {
+  :root {
+    --radius: 0.5rem;
+
+    /* Dark-first palette: deep charcoal + amber gold accents */
+    --background: 0.13 0.008 260;
+    --foreground: 0.94 0.01 100;
+
+    --card: 0.17 0.01 260;
+    --card-foreground: 0.94 0.01 100;
+
+    --popover: 0.19 0.012 260;
+    --popover-foreground: 0.94 0.01 100;
+
+    --primary: 0.78 0.15 75;
+    --primary-foreground: 0.12 0.008 260;
+
+    --secondary: 0.22 0.012 260;
+    --secondary-foreground: 0.85 0.01 100;
+
+    --muted: 0.2 0.01 260;
+    --muted-foreground: 0.6 0.01 260;
+
+    --accent: 0.78 0.15 75;
+    --accent-foreground: 0.12 0.008 260;
+
+    --destructive: 0.6 0.22 22;
+    --destructive-foreground: 0.97 0.01 100;
+
+    --border: 0.26 0.012 260;
+    --input: 0.22 0.01 260;
+    --ring: 0.78 0.15 75;
+
+    /* Gold coin specific */
+    --gold: 0.78 0.15 75;
+    --gold-foreground: 0.15 0.01 260;
+
+    /* Chat specific */
+    --msg-sent: 0.78 0.15 75;
+    --msg-sent-fg: 0.12 0.008 260;
+    --msg-recv: 0.22 0.012 260;
+    --msg-recv-fg: 0.92 0.01 100;
+
+    --chart-1: 0.78 0.15 75;
+    --chart-2: 0.65 0.18 150;
+    --chart-3: 0.6 0.2 200;
+    --chart-4: 0.7 0.16 320;
+    --chart-5: 0.55 0.22 30;
+
+    --sidebar: 0.15 0.01 260;
+    --sidebar-foreground: 0.94 0.01 100;
+    --sidebar-primary: 0.78 0.15 75;
+    --sidebar-primary-foreground: 0.12 0.008 260;
+    --sidebar-accent: 0.22 0.012 260;
+    --sidebar-accent-foreground: 0.94 0.01 100;
+    --sidebar-border: 0.26 0.012 260;
+    --sidebar-ring: 0.78 0.15 75;
+  }
+
+  * {
+    @apply border-border;
+    box-sizing: border-box;
+  }
+
+  html {
+    color-scheme: dark;
+    /* Ensure correct viewport height on mobile browsers */
+    height: -webkit-fill-available;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: "Sora", sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    /* Prevent layout shifts when mobile browser chrome appears/disappears */
+    overscroll-behavior: none;
+    min-height: 100dvh;
+  }
+
+  /* Respect safe area insets on notched phones */
+  @supports (padding: max(0px)) {
+    body {
+      padding-left: env(safe-area-inset-left);
+      padding-right: env(safe-area-inset-right);
+    }
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: "Bricolage Grotesque", sans-serif;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+}
+
+/* ── Utilities ────────────────────────────────────────────────────────── */
+@layer utilities {
+  .font-display {
+    font-family: "Bricolage Grotesque", sans-serif;
+  }
+
+  .font-mono-custom {
+    font-family: "Geist Mono", monospace;
+  }
+
+  .serial-badge {
+    font-family: "Geist Mono", monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.05em;
+  }
+
+  .mybucks-pill {
+    background: oklch(0.22 0.01 260);
+    border: 1px solid oklch(0.3 0.012 260);
+    border-radius: 999px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 10px 3px 4px;
+  }
+
+  .gold-coin {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: linear-gradient(
+      135deg,
+      oklch(0.85 0.18 80) 0%,
+      oklch(0.7 0.16 60) 100%
+    );
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: "Bricolage Grotesque", sans-serif;
+    font-weight: 800;
+    font-size: 0.6rem;
+    color: oklch(0.25 0.01 260);
+    flex-shrink: 0;
+    box-shadow: 0 1px 3px oklch(0 0 0 / 0.4);
+  }
+
+  .msg-bubble-sent {
+    background: oklch(var(--msg-sent));
+    color: oklch(var(--msg-sent-fg));
+    border-radius: 18px 18px 4px 18px;
+  }
+
+  .msg-bubble-recv {
+    background: oklch(var(--msg-recv));
+    color: oklch(var(--msg-recv-fg));
+    border-radius: 18px 18px 18px 4px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 4px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: oklch(0.3 0.01 260);
+    border-radius: 2px;
+  }
+
+  .glass-panel {
+    background: oklch(0.16 0.01 260 / 0.95);
+    backdrop-filter: blur(12px);
+    border: 1px solid oklch(0.28 0.012 260);
+  }
+
+  /* Touch improvements */
+  button, [role="button"], input, textarea, select, a {
+    touch-action: manipulation;
+  }
+}
+
+/* ── Animations ──────────────────────────────────────────────────────── */
+@keyframes slide-in-right {
+  from { transform: translateX(100%); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
+
+.animate-slide-in { animation: slide-in-right 0.25s ease-out; }
+.animate-fade-in  { animation: fade-in 0.2s ease-out; }
+.animate-pulse-dot { animation: pulse-dot 1.5s ease-in-out infinite; }
