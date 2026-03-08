@@ -5,7 +5,7 @@ import { ArrowLeft, Loader2, UserPlus } from "lucide-react";
 import { motion } from "motion/react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { useApp } from "../context/AppContext";
+import { saveCredentials, useApp } from "../context/AppContext";
 import { useActor } from "../hooks/useActor";
 import { formatSerial, hashPassword } from "../utils/crypto";
 
@@ -52,17 +52,28 @@ export default function RegisterPage() {
         hash,
         sessionToken,
       );
+
+      // Save credentials so next page load auto-logs in
+      saveCredentials(username.trim(), hash);
+
       setCurrentUser(profile);
       setView("app");
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
+      const raw = err instanceof Error ? err.message : String(err);
+      const match = raw.match(/Reject text: (.+?)(?:\s*\(.*\))?$/m);
+      const msg = match ? match[1].trim() : raw;
       if (
         msg.toLowerCase().includes("exist") ||
         msg.toLowerCase().includes("taken")
       ) {
-        toast.error("Username already taken");
+        toast.error("Username already taken — please choose another");
+      } else if (
+        msg.toLowerCase().includes("not connected") ||
+        msg.toLowerCase().includes("actor")
+      ) {
+        toast.error("Not connected — please refresh and try again");
       } else {
-        toast.error("Registration failed. Please try again.");
+        toast.error(msg || "Sign up failed — please try again");
       }
     } finally {
       setLoading(false);

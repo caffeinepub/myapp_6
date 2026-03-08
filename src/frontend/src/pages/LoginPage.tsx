@@ -3,10 +3,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2, MessageSquare } from "lucide-react";
 import { motion } from "motion/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import BanDialog from "../components/BanDialog";
-import { useApp } from "../context/AppContext";
+import {
+  loadCredentials,
+  saveCredentials,
+  useApp,
+} from "../context/AppContext";
 import { useActor } from "../hooks/useActor";
 import { banDaysRemaining, hashPassword } from "../utils/crypto";
 
@@ -16,9 +20,41 @@ export default function LoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [autoLoginAttempted, setAutoLoginAttempted] = useState(false);
   const [bannedUser, setBannedUser] = useState<{
     daysRemaining: number;
   } | null>(null);
+
+  // Auto-login on mount if saved credentials exist
+  useEffect(() => {
+    if (!actor || autoLoginAttempted) return;
+    const creds = loadCredentials();
+    if (!creds) {
+      setAutoLoginAttempted(true);
+      return;
+    }
+    setAutoLoginAttempted(true);
+    setLoading(true);
+    actor
+      .loginWithToken(creds.username, creds.passwordHash, sessionToken)
+      .then((profile) => {
+        if (profile.isBanned) {
+          const days = banDaysRemaining(profile.banExpiryTimestamp);
+          if (days > 0) {
+            setBannedUser({ daysRemaining: days });
+            return;
+          }
+        }
+        setCurrentUser(profile);
+        setView("app");
+      })
+      .catch(() => {
+        // Saved credentials are stale or canister was redeployed — clear silently
+        localStorage.removeItem("myapp_saved_credentials");
+        localStorage.removeItem("myapp_session_token");
+      })
+      .finally(() => setLoading(false));
+  }, [actor, autoLoginAttempted, sessionToken, setCurrentUser, setView]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -48,15 +84,32 @@ export default function LoginPage() {
         }
       }
 
+      // Save credentials for auto-login on future page loads
+      saveCredentials(username.trim(), hash);
+
       setCurrentUser(profile);
       setView("app");
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      toast.error(
-        msg.includes("Invalid")
-          ? "Invalid username or password"
-          : "Login failed",
-      );
+      const raw = err instanceof Error ? err.message : String(err);
+      // IC trap messages are wrapped in verbose reject text — extract the core message
+      const match = raw.match(/Reject text: (.+?)(?:\s*\(.*\))?$/m);
+      const msg = match ? match[1].trim() : raw;
+      if (
+        msg.toLowerCase().includes("not found") ||
+        msg.toLowerCase().includes("invalid") ||
+        msg.toLowerCase().includes("incorrect")
+      ) {
+        toast.error("Incorrect username or password");
+      } else if (msg.toLowerCase().includes("banned")) {
+        toast.error("Your account is currently banned");
+      } else if (
+        msg.toLowerCase().includes("not connected") ||
+        msg.toLowerCase().includes("actor")
+      ) {
+        toast.error("Not connected — please refresh and try again");
+      } else {
+        toast.error(msg || "Login failed — please try again");
+      }
     } finally {
       setLoading(false);
     }
@@ -65,6 +118,16 @@ export default function LoginPage() {
   const handleGuestMode = () => {
     setView("guest");
   };
+
+  // Show a spinner while auto-login is in progress (before attempt resolves)
+  const savedCreds = !autoLoginAttempted && loadCredentials();
+  if (savedCreds || (loading && !autoLoginAttempted)) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <>

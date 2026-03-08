@@ -11,8 +11,6 @@ import Runtime "mo:core/Runtime";
 import MixinAuthorization "authorization/MixinAuthorization";
 import AccessControl "authorization/access-control";
 
-
-
 actor {
   // Persistent authorization state
   let accessControlState = AccessControl.initState();
@@ -259,34 +257,40 @@ actor {
     // Login is open to all (including guests)
     // No authorization check needed - anyone can attempt login
 
-    let user = getUser(username);
-
-    if (user.passwordHash != passwordHash) {
-      Runtime.trap("Invalid credentials");
-    };
-
-    if (user.isBanned and Time.now() > user.banExpiryTimestamp) {
-      let updatedUser = {
-        user with isBanned = false;
-        banExpiryTimestamp = 0;
+    switch (users.get(username)) {
+      case (null) {
+        Runtime.trap("Username not found");
       };
-      users.add(username, updatedUser);
-      sessionTokenToUsername.add(sessionToken, username);
-      sessionTokenToPrincipal.add(sessionToken, caller);
-      principalToUsername.add(caller, username);
-      return userToProfile(updatedUser);
-    };
+      case (?user) {
+        if (user.passwordHash != passwordHash) {
+          Runtime.trap("Invalid username or password");
+        };
 
-    if (user.isBanned) {
-      Runtime.trap(
-        "User is banned until " # user.banExpiryTimestamp.toText()
-      );
-    };
+        // Auto-unban if ban has expired
+        if (user.isBanned and Time.now() > user.banExpiryTimestamp) {
+          let updatedUser = {
+            user with isBanned = false;
+            banExpiryTimestamp = 0;
+          };
+          users.add(username, updatedUser);
+          
+          // Always bind session token to caller
+          sessionTokenToUsername.add(sessionToken, username);
+          sessionTokenToPrincipal.add(sessionToken, caller);
+          principalToUsername.add(caller, username);
+          
+          return userToProfile(updatedUser);
+        };
 
-    sessionTokenToUsername.add(sessionToken, username);
-    sessionTokenToPrincipal.add(sessionToken, caller);
-    principalToUsername.add(caller, username);
-    userToProfile(user);
+        // Always bind session token to caller (even if banned)
+        sessionTokenToUsername.add(sessionToken, username);
+        sessionTokenToPrincipal.add(sessionToken, caller);
+        principalToUsername.add(caller, username);
+
+        // Return profile even if user is banned (let frontend handle ban UI)
+        userToProfile(user);
+      };
+    };
   };
 
   public shared ({ caller }) func logoutToken(sessionToken : Text) : async () {

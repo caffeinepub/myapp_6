@@ -12,13 +12,42 @@ import { generateSessionToken } from "../utils/crypto";
 export type AppView = "login" | "register" | "app" | "guest";
 
 const SESSION_TOKEN_KEY = "myapp_session_token";
+const SAVED_CREDENTIALS_KEY = "myapp_saved_credentials";
+
+// Stored credentials for auto-login on page reload
+interface SavedCredentials {
+  username: string;
+  passwordHash: string;
+}
 
 function getOrCreateSessionToken(): string {
-  const existing = sessionStorage.getItem(SESSION_TOKEN_KEY);
+  // Use localStorage so it persists across browser restarts
+  const existing = localStorage.getItem(SESSION_TOKEN_KEY);
   if (existing) return existing;
   const token = generateSessionToken();
-  sessionStorage.setItem(SESSION_TOKEN_KEY, token);
+  localStorage.setItem(SESSION_TOKEN_KEY, token);
   return token;
+}
+
+export function saveCredentials(username: string, passwordHash: string) {
+  localStorage.setItem(
+    SAVED_CREDENTIALS_KEY,
+    JSON.stringify({ username, passwordHash }),
+  );
+}
+
+export function loadCredentials(): SavedCredentials | null {
+  try {
+    const raw = localStorage.getItem(SAVED_CREDENTIALS_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as SavedCredentials;
+  } catch {
+    return null;
+  }
+}
+
+function clearCredentials() {
+  localStorage.removeItem(SAVED_CREDENTIALS_KEY);
 }
 
 interface AppContextValue {
@@ -46,7 +75,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [isGuest, setIsGuest] = useState(false);
   const [guestContactSerial, setGuestContactSerial] = useState("");
   const [myBucksBalance, setMyBucksBalance] = useState<bigint>(0n);
-  // Session token: per-tab, never syncs between devices
+  // Session token: persisted in localStorage so it survives page reloads
   const [sessionToken] = useState<string>(() => getOrCreateSessionToken());
 
   const logout = useCallback(
@@ -62,19 +91,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setGuestContactSerial("");
       setMyBucksBalance(0n);
       setView("login");
-      // Clear session storage (guest data, etc.) but keep the token so
-      // the same tab can log in again without re-generating a token.
-      // Only wipe non-token session keys.
-      const keysToRemove: string[] = [];
-      for (let i = 0; i < sessionStorage.length; i++) {
-        const key = sessionStorage.key(i);
-        if (key && key !== SESSION_TOKEN_KEY) {
-          keysToRemove.push(key);
-        }
-      }
-      for (const key of keysToRemove) {
-        sessionStorage.removeItem(key);
-      }
+      // Clear saved credentials and session token so user is truly logged out
+      clearCredentials();
+      localStorage.removeItem(SESSION_TOKEN_KEY);
     },
     [sessionToken],
   );
@@ -83,7 +102,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const handleUnload = () => {
       if (isGuest) {
-        sessionStorage.clear();
+        localStorage.removeItem(SAVED_CREDENTIALS_KEY);
       }
     };
     window.addEventListener("beforeunload", handleUnload);
