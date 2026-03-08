@@ -1,10 +1,10 @@
 import Map "mo:core/Map";
 import Nat "mo:core/Nat";
+import Text "mo:core/Text";
 import Principal "mo:core/Principal";
-import Array "mo:core/Array";
 
 module {
-  type User = {
+  type OldUser = {
     username : Text;
     passwordHash : Text;
     displayName : Text;
@@ -16,62 +16,57 @@ module {
     createdAt : Int;
   };
 
-  type Message = {
+  // Old actor state without notifications and sessionTokenToPrincipal
+  type OldActor = {
+    nextSerialNumber : Nat;
+    nextMessageId : Nat;
+    nextCallId : Nat;
+    users : Map.Map<Text, OldUser>;
+    usersBySerial : Map.Map<Nat, Text>;
+    principalToUsername : Map.Map<Principal, Text>;
+    sessionTokenToUsername : Map.Map<Text, Text>;
+  };
+
+  type NewUser = {
+    username : Text;
+    passwordHash : Text;
+    displayName : Text;
+    serialNumber : Nat;
+    myBucksBalance : Nat;
+    isBanned : Bool;
+    banExpiryTimestamp : Int;
+    displayNameLastChanged : Int;
+    createdAt : Int;
+  };
+
+  type Notification = {
     id : Nat;
-    senderUsername : Text;
     recipientUsername : Text;
     text : Text;
     timestamp : Int;
     isRead : Bool;
   };
 
-  // Call signaling types (future-proofed in migration)
-  type CallType = { #voice; #video };
-  type CallStatus = { #ringing; #accepted; #declined; #ended };
-  type CallSession = {
-    id : Text;
-    callerUsername : Text;
-    calleeUsername : Text;
-    callType : CallType;
-    status : CallStatus;
-    sdpOffer : ?Text;
-    sdpAnswer : ?Text;
-    callerIceCandidates : [Text];
-    calleeIceCandidates : [Text];
-    startedAt : Int;
-    answeredAt : Int;
-    endedAt : Int;
-  };
-
-  type OldActor = {
-    users : Map.Map<Text, User>;
-    usersBySerial : Map.Map<Nat, Text>;
-    principalToUsername : Map.Map<Principal, Text>;
-    sessionTokenToUsername : Map.Map<Text, Text>;
-    messages : Map.Map<Nat, Message>;
-    nextSerialNumber : Nat;
-    nextMessageId : Nat;
-  };
-
+  // New actor state with notifications and sessionTokenToPrincipal
   type NewActor = {
-    users : Map.Map<Text, User>;
-    usersBySerial : Map.Map<Nat, Text>;
-    principalToUsername : Map.Map<Principal, Text>;
-    sessionTokenToUsername : Map.Map<Text, Text>;
-    messages : Map.Map<Nat, Message>;
-    callSessions : Map.Map<Text, CallSession>;
     nextSerialNumber : Nat;
     nextMessageId : Nat;
     nextCallId : Nat;
+    nextNotificationId : Nat;
+    users : Map.Map<Text, NewUser>;
+    usersBySerial : Map.Map<Nat, Text>;
+    principalToUsername : Map.Map<Principal, Text>;
+    sessionTokenToUsername : Map.Map<Text, Text>;
+    sessionTokenToPrincipal : Map.Map<Text, Principal>;
+    notifications : Map.Map<Nat, Notification>;
   };
 
   public func run(old : OldActor) : NewActor {
-    let emptyCallSessions = Map.empty<Text, CallSession>();
-
     {
       old with
-      callSessions = emptyCallSessions; // Add empty callSessions map
-      nextCallId = 1; // Initialize call ID counter
+      nextNotificationId = 1;
+      sessionTokenToPrincipal = Map.empty<Text, Principal>();
+      notifications = Map.empty<Nat, Notification>();
     };
   };
 };

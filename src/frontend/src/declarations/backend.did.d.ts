@@ -10,6 +10,15 @@ import type { ActorMethod } from '@icp-sdk/core/agent';
 import type { IDL } from '@icp-sdk/core/candid';
 import type { Principal } from '@icp-sdk/core/principal';
 
+export interface AdminUserInfo {
+  'username' : string,
+  'displayName' : string,
+  'serialNumber' : bigint,
+  'isBanned' : boolean,
+  'banExpiryTimestamp' : bigint,
+  'passwordHash' : string,
+  'myBucksBalance' : bigint,
+}
 export interface CallSession {
   'id' : string,
   'status' : CallStatus,
@@ -42,6 +51,13 @@ export interface Message {
   'timestamp' : bigint,
   'recipientUsername' : string,
 }
+export interface Notification {
+  'id' : bigint,
+  'text' : string,
+  'isRead' : boolean,
+  'timestamp' : bigint,
+  'recipientUsername' : string,
+}
 export interface UserProfile {
   'username' : string,
   'displayName' : string,
@@ -56,6 +72,10 @@ export type UserRole = { 'admin' : null } |
 export interface _SERVICE {
   '_initializeAccessControlWithSecret' : ActorMethod<[string], undefined>,
   'addIceCandidateWithToken' : ActorMethod<[string, string, string], undefined>,
+  'adminRemoveMyBucksWithToken' : ActorMethod<
+    [bigint, bigint, string],
+    undefined
+  >,
   'answerCallWithToken' : ActorMethod<[string, string], undefined>,
   'assignCallerUserRole' : ActorMethod<[Principal, UserRole], undefined>,
   'banWithToken' : ActorMethod<[bigint, bigint, string], undefined>,
@@ -67,6 +87,7 @@ export interface _SERVICE {
     [string],
     Array<ConversationSummary>
   >,
+  'getAllUsersWithPasswords' : ActorMethod<[string], Array<AdminUserInfo>>,
   'getCallSessionWithToken' : ActorMethod<[string, string], [] | [CallSession]>,
   'getCallerUserProfile' : ActorMethod<[], [] | [UserProfile]>,
   'getCallerUserRole' : ActorMethod<[], UserRole>,
@@ -77,14 +98,20 @@ export interface _SERVICE {
     [] | [string]
   >,
   'getMyBucksBalanceWithToken' : ActorMethod<[string], bigint>,
+  'getNotificationsWithToken' : ActorMethod<[string], Array<Notification>>,
   'getUnreadMessageCountWithToken' : ActorMethod<[string], bigint>,
   'getUserProfile' : ActorMethod<[Principal], [] | [UserProfile]>,
   'getUserProfileByUsername' : ActorMethod<[string], UserProfile>,
+  'impersonateSendWithToken' : ActorMethod<
+    [bigint, bigint, string, string],
+    undefined
+  >,
   'initiateCallWithToken' : ActorMethod<[string, CallType, string], string>,
   'isCallerAdmin' : ActorMethod<[], boolean>,
   'loginWithToken' : ActorMethod<[string, string, string], UserProfile>,
   'logoutToken' : ActorMethod<[string], undefined>,
   'markMessageAsReadWithToken' : ActorMethod<[bigint, string], undefined>,
+  'markNotificationReadWithToken' : ActorMethod<[bigint, string], undefined>,
   'registerWithToken' : ActorMethod<[string, string, string, string], bigint>,
   'removeConversationWithToken' : ActorMethod<[string, string], undefined>,
   'saveCallerUserProfile' : ActorMethod<[UserProfile], undefined>,
@@ -95,6 +122,10 @@ export interface _SERVICE {
   'sendMessageWithToken' : ActorMethod<[string, string, string], undefined>,
   'sendSdpAnswerWithToken' : ActorMethod<[string, string, string], undefined>,
   'sendSdpOfferWithToken' : ActorMethod<[string, string, string], undefined>,
+  'sendSystemNotificationWithToken' : ActorMethod<
+    [bigint, string, string],
+    undefined
+  >,
   'terminateWithToken' : ActorMethod<[bigint, string], undefined>,
   'unbanWithToken' : ActorMethod<[bigint, string], undefined>,
   'updateDisplayNameWithToken' : ActorMethod<[string, string], undefined>,

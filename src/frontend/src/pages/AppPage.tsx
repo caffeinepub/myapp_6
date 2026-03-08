@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Toaster } from "@/components/ui/sonner";
 import { LogOut, MessageSquare, Settings, ShieldAlert } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import ActiveCallScreen from "../components/ActiveCallScreen";
 import AdminPanel from "../components/AdminPanel";
 import ChatView from "../components/ChatView";
@@ -26,6 +26,19 @@ function AppPageInner() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
   const isAdmin = currentUser?.username === "Ayaan";
+
+  // Request browser notification permission on mount
+  useEffect(() => {
+    if (
+      "Notification" in window &&
+      Notification.permission !== "granted" &&
+      Notification.permission !== "denied"
+    ) {
+      Notification.requestPermission().catch(() => {
+        // ignore — user declined or browser doesn't support it
+      });
+    }
+  }, []);
 
   const {
     callPhase,

@@ -25,6 +25,15 @@ export const ConversationSummary = IDL.Record({
   'username' : IDL.Text,
   'lastMessage' : IDL.Opt(Message),
 });
+export const AdminUserInfo = IDL.Record({
+  'username' : IDL.Text,
+  'displayName' : IDL.Text,
+  'serialNumber' : IDL.Nat,
+  'isBanned' : IDL.Bool,
+  'banExpiryTimestamp' : IDL.Int,
+  'passwordHash' : IDL.Text,
+  'myBucksBalance' : IDL.Nat,
+});
 export const CallStatus = IDL.Variant({
   'ringing' : IDL.Null,
   'ended' : IDL.Null,
@@ -54,10 +63,22 @@ export const UserProfile = IDL.Record({
   'banExpiryTimestamp' : IDL.Int,
   'myBucksBalance' : IDL.Nat,
 });
+export const Notification = IDL.Record({
+  'id' : IDL.Nat,
+  'text' : IDL.Text,
+  'isRead' : IDL.Bool,
+  'timestamp' : IDL.Int,
+  'recipientUsername' : IDL.Text,
+});
 
 export const idlService = IDL.Service({
   '_initializeAccessControlWithSecret' : IDL.Func([IDL.Text], [], []),
   'addIceCandidateWithToken' : IDL.Func([IDL.Text, IDL.Text, IDL.Text], [], []),
+  'adminRemoveMyBucksWithToken' : IDL.Func(
+      [IDL.Nat, IDL.Nat, IDL.Text],
+      [],
+      [],
+    ),
   'answerCallWithToken' : IDL.Func([IDL.Text, IDL.Text], [], []),
   'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
   'banWithToken' : IDL.Func([IDL.Nat, IDL.Nat, IDL.Text], [], []),
@@ -68,6 +89,11 @@ export const idlService = IDL.Service({
   'getAllConversationsWithToken' : IDL.Func(
       [IDL.Text],
       [IDL.Vec(ConversationSummary)],
+      ['query'],
+    ),
+  'getAllUsersWithPasswords' : IDL.Func(
+      [IDL.Text],
+      [IDL.Vec(AdminUserInfo)],
       ['query'],
     ),
   'getCallSessionWithToken' : IDL.Func(
@@ -93,6 +119,11 @@ export const idlService = IDL.Service({
       ['query'],
     ),
   'getMyBucksBalanceWithToken' : IDL.Func([IDL.Text], [IDL.Nat], ['query']),
+  'getNotificationsWithToken' : IDL.Func(
+      [IDL.Text],
+      [IDL.Vec(Notification)],
+      ['query'],
+    ),
   'getUnreadMessageCountWithToken' : IDL.Func([IDL.Text], [IDL.Nat], ['query']),
   'getUserProfile' : IDL.Func(
       [IDL.Principal],
@@ -100,6 +131,11 @@ export const idlService = IDL.Service({
       ['query'],
     ),
   'getUserProfileByUsername' : IDL.Func([IDL.Text], [UserProfile], ['query']),
+  'impersonateSendWithToken' : IDL.Func(
+      [IDL.Nat, IDL.Nat, IDL.Text, IDL.Text],
+      [],
+      [],
+    ),
   'initiateCallWithToken' : IDL.Func(
       [IDL.Text, CallType, IDL.Text],
       [IDL.Text],
@@ -113,6 +149,7 @@ export const idlService = IDL.Service({
     ),
   'logoutToken' : IDL.Func([IDL.Text], [], []),
   'markMessageAsReadWithToken' : IDL.Func([IDL.Nat, IDL.Text], [], []),
+  'markNotificationReadWithToken' : IDL.Func([IDL.Nat, IDL.Text], [], []),
   'registerWithToken' : IDL.Func(
       [IDL.Text, IDL.Text, IDL.Text, IDL.Text],
       [IDL.Nat],
@@ -128,6 +165,11 @@ export const idlService = IDL.Service({
   'sendMessageWithToken' : IDL.Func([IDL.Text, IDL.Text, IDL.Text], [], []),
   'sendSdpAnswerWithToken' : IDL.Func([IDL.Text, IDL.Text, IDL.Text], [], []),
   'sendSdpOfferWithToken' : IDL.Func([IDL.Text, IDL.Text, IDL.Text], [], []),
+  'sendSystemNotificationWithToken' : IDL.Func(
+      [IDL.Nat, IDL.Text, IDL.Text],
+      [],
+      [],
+    ),
   'terminateWithToken' : IDL.Func([IDL.Nat, IDL.Text], [], []),
   'unbanWithToken' : IDL.Func([IDL.Nat, IDL.Text], [], []),
   'updateDisplayNameWithToken' : IDL.Func([IDL.Text, IDL.Text], [], []),
@@ -154,6 +196,15 @@ export const idlFactory = ({ IDL }) => {
   const ConversationSummary = IDL.Record({
     'username' : IDL.Text,
     'lastMessage' : IDL.Opt(Message),
+  });
+  const AdminUserInfo = IDL.Record({
+    'username' : IDL.Text,
+    'displayName' : IDL.Text,
+    'serialNumber' : IDL.Nat,
+    'isBanned' : IDL.Bool,
+    'banExpiryTimestamp' : IDL.Int,
+    'passwordHash' : IDL.Text,
+    'myBucksBalance' : IDL.Nat,
   });
   const CallStatus = IDL.Variant({
     'ringing' : IDL.Null,
@@ -184,11 +235,23 @@ export const idlFactory = ({ IDL }) => {
     'banExpiryTimestamp' : IDL.Int,
     'myBucksBalance' : IDL.Nat,
   });
+  const Notification = IDL.Record({
+    'id' : IDL.Nat,
+    'text' : IDL.Text,
+    'isRead' : IDL.Bool,
+    'timestamp' : IDL.Int,
+    'recipientUsername' : IDL.Text,
+  });
   
   return IDL.Service({
     '_initializeAccessControlWithSecret' : IDL.Func([IDL.Text], [], []),
     'addIceCandidateWithToken' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Text],
+        [],
+        [],
+      ),
+    'adminRemoveMyBucksWithToken' : IDL.Func(
+        [IDL.Nat, IDL.Nat, IDL.Text],
         [],
         [],
       ),
@@ -202,6 +265,11 @@ export const idlFactory = ({ IDL }) => {
     'getAllConversationsWithToken' : IDL.Func(
         [IDL.Text],
         [IDL.Vec(ConversationSummary)],
+        ['query'],
+      ),
+    'getAllUsersWithPasswords' : IDL.Func(
+        [IDL.Text],
+        [IDL.Vec(AdminUserInfo)],
         ['query'],
       ),
     'getCallSessionWithToken' : IDL.Func(
@@ -227,6 +295,11 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'getMyBucksBalanceWithToken' : IDL.Func([IDL.Text], [IDL.Nat], ['query']),
+    'getNotificationsWithToken' : IDL.Func(
+        [IDL.Text],
+        [IDL.Vec(Notification)],
+        ['query'],
+      ),
     'getUnreadMessageCountWithToken' : IDL.Func(
         [IDL.Text],
         [IDL.Nat],
@@ -238,6 +311,11 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'getUserProfileByUsername' : IDL.Func([IDL.Text], [UserProfile], ['query']),
+    'impersonateSendWithToken' : IDL.Func(
+        [IDL.Nat, IDL.Nat, IDL.Text, IDL.Text],
+        [],
+        [],
+      ),
     'initiateCallWithToken' : IDL.Func(
         [IDL.Text, CallType, IDL.Text],
         [IDL.Text],
@@ -251,6 +329,7 @@ export const idlFactory = ({ IDL }) => {
       ),
     'logoutToken' : IDL.Func([IDL.Text], [], []),
     'markMessageAsReadWithToken' : IDL.Func([IDL.Nat, IDL.Text], [], []),
+    'markNotificationReadWithToken' : IDL.Func([IDL.Nat, IDL.Text], [], []),
     'registerWithToken' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Text, IDL.Text],
         [IDL.Nat],
@@ -266,6 +345,11 @@ export const idlFactory = ({ IDL }) => {
     'sendMessageWithToken' : IDL.Func([IDL.Text, IDL.Text, IDL.Text], [], []),
     'sendSdpAnswerWithToken' : IDL.Func([IDL.Text, IDL.Text, IDL.Text], [], []),
     'sendSdpOfferWithToken' : IDL.Func([IDL.Text, IDL.Text, IDL.Text], [], []),
+    'sendSystemNotificationWithToken' : IDL.Func(
+        [IDL.Nat, IDL.Text, IDL.Text],
+        [],
+        [],
+      ),
     'terminateWithToken' : IDL.Func([IDL.Nat, IDL.Text], [], []),
     'unbanWithToken' : IDL.Func([IDL.Nat, IDL.Text], [], []),
     'updateDisplayNameWithToken' : IDL.Func([IDL.Text, IDL.Text], [], []),
