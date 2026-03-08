@@ -89,6 +89,20 @@ export class ExternalBlob {
         return this;
     }
 }
+export interface CallSession {
+    id: string;
+    status: CallStatus;
+    startedAt: bigint;
+    endedAt: bigint;
+    callType: CallType;
+    sdpOffer?: string;
+    callerUsername: string;
+    callerIceCandidates: Array<string>;
+    answeredAt: bigint;
+    calleeIceCandidates: Array<string>;
+    calleeUsername: string;
+    sdpAnswer?: string;
+}
 export interface Message {
     id: bigint;
     text: string;
@@ -109,6 +123,16 @@ export interface UserProfile {
     banExpiryTimestamp: bigint;
     myBucksBalance: bigint;
 }
+export enum CallStatus {
+    ringing = "ringing",
+    ended = "ended",
+    accepted = "accepted",
+    declined = "declined"
+}
+export enum CallType {
+    video = "video",
+    voice = "voice"
+}
 export enum UserRole {
     admin = "admin",
     user = "user",
@@ -116,36 +140,47 @@ export enum UserRole {
 }
 export interface backendInterface {
     _initializeAccessControlWithSecret(userSecret: string): Promise<void>;
+    addIceCandidateWithToken(callId: string, candidate: string, token: string): Promise<void>;
+    answerCallWithToken(callId: string, token: string): Promise<void>;
     assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
     banWithToken(serial: bigint, days: bigint, token: string): Promise<void>;
+    declineCallWithToken(callId: string, token: string): Promise<void>;
+    deleteMessageWithToken(messageId: bigint, token: string): Promise<void>;
+    endCallWithToken(callId: string, token: string): Promise<void>;
     enhanceWithToken(serial: bigint, amount: bigint, token: string): Promise<void>;
     getAllConversationsWithToken(token: string): Promise<Array<ConversationSummary>>;
+    getCallSessionWithToken(callId: string, token: string): Promise<CallSession | null>;
     getCallerUserProfile(): Promise<UserProfile | null>;
     getCallerUserRole(): Promise<UserRole>;
     getConversationWithToken(otherUsername: string, token: string): Promise<Array<Message>>;
+    getIncomingCallWithToken(token: string): Promise<CallSession | null>;
     getLatestUnreadMessageSenderWithToken(token: string): Promise<string | null>;
     getMyBucksBalanceWithToken(token: string): Promise<bigint>;
     getUnreadMessageCountWithToken(token: string): Promise<bigint>;
     getUserProfile(user: Principal): Promise<UserProfile | null>;
     getUserProfileByUsername(username: string): Promise<UserProfile>;
+    initiateCallWithToken(calleeUsername: string, callType: CallType, token: string): Promise<string>;
     isCallerAdmin(): Promise<boolean>;
     loginWithToken(username: string, passwordHash: string, sessionToken: string): Promise<UserProfile>;
     logoutToken(sessionToken: string): Promise<void>;
     markMessageAsReadWithToken(messageId: bigint, token: string): Promise<void>;
     registerWithToken(username: string, passwordHash: string, displayName: string, sessionToken: string): Promise<bigint>;
+    removeConversationWithToken(otherUsername: string, token: string): Promise<void>;
     saveCallerUserProfile(arg0: UserProfile): Promise<void>;
     searchBySerial(serial: bigint): Promise<{
         username: string;
         displayName: string;
     }>;
     sendMessageWithToken(recipientUsername: string, text: string, token: string): Promise<void>;
+    sendSdpAnswerWithToken(callId: string, sdp: string, token: string): Promise<void>;
+    sendSdpOfferWithToken(callId: string, sdp: string, token: string): Promise<void>;
     terminateWithToken(serial: bigint, token: string): Promise<void>;
     unbanWithToken(serial: bigint, token: string): Promise<void>;
     updateDisplayNameWithToken(newDisplayName: string, token: string): Promise<void>;
     updatePasswordWithToken(currentPasswordHash: string, newPasswordHash: string, token: string): Promise<void>;
     updateUsernameWithToken(newUsername: string, token: string): Promise<void>;
 }
-import type { ConversationSummary as _ConversationSummary, Message as _Message, UserProfile as _UserProfile, UserRole as _UserRole } from "./declarations/backend.did.d.ts";
+import type { CallSession as _CallSession, CallStatus as _CallStatus, CallType as _CallType, ConversationSummary as _ConversationSummary, Message as _Message, UserProfile as _UserProfile, UserRole as _UserRole } from "./declarations/backend.did.d.ts";
 export class Backend implements backendInterface {
     constructor(private actor: ActorSubclass<_SERVICE>, private _uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, private _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, private processError?: (error: unknown) => never){}
     async _initializeAccessControlWithSecret(arg0: string): Promise<void> {
@@ -159,6 +194,34 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor._initializeAccessControlWithSecret(arg0);
+            return result;
+        }
+    }
+    async addIceCandidateWithToken(arg0: string, arg1: string, arg2: string): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.addIceCandidateWithToken(arg0, arg1, arg2);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.addIceCandidateWithToken(arg0, arg1, arg2);
+            return result;
+        }
+    }
+    async answerCallWithToken(arg0: string, arg1: string): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.answerCallWithToken(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.answerCallWithToken(arg0, arg1);
             return result;
         }
     }
@@ -190,6 +253,48 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async declineCallWithToken(arg0: string, arg1: string): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.declineCallWithToken(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.declineCallWithToken(arg0, arg1);
+            return result;
+        }
+    }
+    async deleteMessageWithToken(arg0: bigint, arg1: string): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.deleteMessageWithToken(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.deleteMessageWithToken(arg0, arg1);
+            return result;
+        }
+    }
+    async endCallWithToken(arg0: string, arg1: string): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.endCallWithToken(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.endCallWithToken(arg0, arg1);
+            return result;
+        }
+    }
     async enhanceWithToken(arg0: bigint, arg1: bigint, arg2: string): Promise<void> {
         if (this.processError) {
             try {
@@ -218,32 +323,46 @@ export class Backend implements backendInterface {
             return from_candid_vec_n3(this._uploadFile, this._downloadFile, result);
         }
     }
-    async getCallerUserProfile(): Promise<UserProfile | null> {
+    async getCallSessionWithToken(arg0: string, arg1: string): Promise<CallSession | null> {
         if (this.processError) {
             try {
-                const result = await this.actor.getCallerUserProfile();
+                const result = await this.actor.getCallSessionWithToken(arg0, arg1);
                 return from_candid_opt_n7(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.getCallerUserProfile();
+            const result = await this.actor.getCallSessionWithToken(arg0, arg1);
             return from_candid_opt_n7(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async getCallerUserProfile(): Promise<UserProfile | null> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getCallerUserProfile();
+                return from_candid_opt_n15(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getCallerUserProfile();
+            return from_candid_opt_n15(this._uploadFile, this._downloadFile, result);
         }
     }
     async getCallerUserRole(): Promise<UserRole> {
         if (this.processError) {
             try {
                 const result = await this.actor.getCallerUserRole();
-                return from_candid_UserRole_n8(this._uploadFile, this._downloadFile, result);
+                return from_candid_UserRole_n16(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
             const result = await this.actor.getCallerUserRole();
-            return from_candid_UserRole_n8(this._uploadFile, this._downloadFile, result);
+            return from_candid_UserRole_n16(this._uploadFile, this._downloadFile, result);
         }
     }
     async getConversationWithToken(arg0: string, arg1: string): Promise<Array<Message>> {
@@ -260,18 +379,32 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async getIncomingCallWithToken(arg0: string): Promise<CallSession | null> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getIncomingCallWithToken(arg0);
+                return from_candid_opt_n7(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getIncomingCallWithToken(arg0);
+            return from_candid_opt_n7(this._uploadFile, this._downloadFile, result);
+        }
+    }
     async getLatestUnreadMessageSenderWithToken(arg0: string): Promise<string | null> {
         if (this.processError) {
             try {
                 const result = await this.actor.getLatestUnreadMessageSenderWithToken(arg0);
-                return from_candid_opt_n10(this._uploadFile, this._downloadFile, result);
+                return from_candid_opt_n14(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
             const result = await this.actor.getLatestUnreadMessageSenderWithToken(arg0);
-            return from_candid_opt_n10(this._uploadFile, this._downloadFile, result);
+            return from_candid_opt_n14(this._uploadFile, this._downloadFile, result);
         }
     }
     async getMyBucksBalanceWithToken(arg0: string): Promise<bigint> {
@@ -306,14 +439,14 @@ export class Backend implements backendInterface {
         if (this.processError) {
             try {
                 const result = await this.actor.getUserProfile(arg0);
-                return from_candid_opt_n7(this._uploadFile, this._downloadFile, result);
+                return from_candid_opt_n15(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
             const result = await this.actor.getUserProfile(arg0);
-            return from_candid_opt_n7(this._uploadFile, this._downloadFile, result);
+            return from_candid_opt_n15(this._uploadFile, this._downloadFile, result);
         }
     }
     async getUserProfileByUsername(arg0: string): Promise<UserProfile> {
@@ -327,6 +460,20 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.getUserProfileByUsername(arg0);
+            return result;
+        }
+    }
+    async initiateCallWithToken(arg0: string, arg1: CallType, arg2: string): Promise<string> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.initiateCallWithToken(arg0, to_candid_CallType_n18(this._uploadFile, this._downloadFile, arg1), arg2);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.initiateCallWithToken(arg0, to_candid_CallType_n18(this._uploadFile, this._downloadFile, arg1), arg2);
             return result;
         }
     }
@@ -400,6 +547,20 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async removeConversationWithToken(arg0: string, arg1: string): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.removeConversationWithToken(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.removeConversationWithToken(arg0, arg1);
+            return result;
+        }
+    }
     async saveCallerUserProfile(arg0: UserProfile): Promise<void> {
         if (this.processError) {
             try {
@@ -442,6 +603,34 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.sendMessageWithToken(arg0, arg1, arg2);
+            return result;
+        }
+    }
+    async sendSdpAnswerWithToken(arg0: string, arg1: string, arg2: string): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.sendSdpAnswerWithToken(arg0, arg1, arg2);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.sendSdpAnswerWithToken(arg0, arg1, arg2);
+            return result;
+        }
+    }
+    async sendSdpOfferWithToken(arg0: string, arg1: string, arg2: string): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.sendSdpOfferWithToken(arg0, arg1, arg2);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.sendSdpOfferWithToken(arg0, arg1, arg2);
             return result;
         }
     }
@@ -516,20 +705,32 @@ export class Backend implements backendInterface {
         }
     }
 }
+function from_candid_CallSession_n8(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _CallSession): CallSession {
+    return from_candid_record_n9(_uploadFile, _downloadFile, value);
+}
+function from_candid_CallStatus_n10(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _CallStatus): CallStatus {
+    return from_candid_variant_n11(_uploadFile, _downloadFile, value);
+}
+function from_candid_CallType_n12(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _CallType): CallType {
+    return from_candid_variant_n13(_uploadFile, _downloadFile, value);
+}
 function from_candid_ConversationSummary_n4(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _ConversationSummary): ConversationSummary {
     return from_candid_record_n5(_uploadFile, _downloadFile, value);
 }
-function from_candid_UserRole_n8(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _UserRole): UserRole {
-    return from_candid_variant_n9(_uploadFile, _downloadFile, value);
+function from_candid_UserRole_n16(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _UserRole): UserRole {
+    return from_candid_variant_n17(_uploadFile, _downloadFile, value);
 }
-function from_candid_opt_n10(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [string]): string | null {
+function from_candid_opt_n14(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [string]): string | null {
+    return value.length === 0 ? null : value[0];
+}
+function from_candid_opt_n15(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_UserProfile]): UserProfile | null {
     return value.length === 0 ? null : value[0];
 }
 function from_candid_opt_n6(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_Message]): Message | null {
     return value.length === 0 ? null : value[0];
 }
-function from_candid_opt_n7(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_UserProfile]): UserProfile | null {
-    return value.length === 0 ? null : value[0];
+function from_candid_opt_n7(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_CallSession]): CallSession | null {
+    return value.length === 0 ? null : from_candid_CallSession_n8(_uploadFile, _downloadFile, value[0]);
 }
 function from_candid_record_n5(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
     username: string;
@@ -543,7 +744,67 @@ function from_candid_record_n5(_uploadFile: (file: ExternalBlob) => Promise<Uint
         lastMessage: record_opt_to_undefined(from_candid_opt_n6(_uploadFile, _downloadFile, value.lastMessage))
     };
 }
-function from_candid_variant_n9(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+function from_candid_record_n9(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+    id: string;
+    status: _CallStatus;
+    startedAt: bigint;
+    endedAt: bigint;
+    callType: _CallType;
+    sdpOffer: [] | [string];
+    callerUsername: string;
+    callerIceCandidates: Array<string>;
+    answeredAt: bigint;
+    calleeIceCandidates: Array<string>;
+    calleeUsername: string;
+    sdpAnswer: [] | [string];
+}): {
+    id: string;
+    status: CallStatus;
+    startedAt: bigint;
+    endedAt: bigint;
+    callType: CallType;
+    sdpOffer?: string;
+    callerUsername: string;
+    callerIceCandidates: Array<string>;
+    answeredAt: bigint;
+    calleeIceCandidates: Array<string>;
+    calleeUsername: string;
+    sdpAnswer?: string;
+} {
+    return {
+        id: value.id,
+        status: from_candid_CallStatus_n10(_uploadFile, _downloadFile, value.status),
+        startedAt: value.startedAt,
+        endedAt: value.endedAt,
+        callType: from_candid_CallType_n12(_uploadFile, _downloadFile, value.callType),
+        sdpOffer: record_opt_to_undefined(from_candid_opt_n14(_uploadFile, _downloadFile, value.sdpOffer)),
+        callerUsername: value.callerUsername,
+        callerIceCandidates: value.callerIceCandidates,
+        answeredAt: value.answeredAt,
+        calleeIceCandidates: value.calleeIceCandidates,
+        calleeUsername: value.calleeUsername,
+        sdpAnswer: record_opt_to_undefined(from_candid_opt_n14(_uploadFile, _downloadFile, value.sdpAnswer))
+    };
+}
+function from_candid_variant_n11(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+    ringing: null;
+} | {
+    ended: null;
+} | {
+    accepted: null;
+} | {
+    declined: null;
+}): CallStatus {
+    return "ringing" in value ? CallStatus.ringing : "ended" in value ? CallStatus.ended : "accepted" in value ? CallStatus.accepted : "declined" in value ? CallStatus.declined : value;
+}
+function from_candid_variant_n13(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+    video: null;
+} | {
+    voice: null;
+}): CallType {
+    return "video" in value ? CallType.video : "voice" in value ? CallType.voice : value;
+}
+function from_candid_variant_n17(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
     admin: null;
 } | {
     user: null;
@@ -555,8 +816,22 @@ function from_candid_variant_n9(_uploadFile: (file: ExternalBlob) => Promise<Uin
 function from_candid_vec_n3(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Array<_ConversationSummary>): Array<ConversationSummary> {
     return value.map((x)=>from_candid_ConversationSummary_n4(_uploadFile, _downloadFile, x));
 }
+function to_candid_CallType_n18(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: CallType): _CallType {
+    return to_candid_variant_n19(_uploadFile, _downloadFile, value);
+}
 function to_candid_UserRole_n1(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: UserRole): _UserRole {
     return to_candid_variant_n2(_uploadFile, _downloadFile, value);
+}
+function to_candid_variant_n19(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: CallType): {
+    video: null;
+} | {
+    voice: null;
+} {
+    return value == CallType.video ? {
+        video: null
+    } : value == CallType.voice ? {
+        voice: null
+    } : value;
 }
 function to_candid_variant_n2(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: UserRole): {
     admin: null;

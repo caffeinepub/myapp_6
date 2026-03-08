@@ -1,18 +1,19 @@
 import Text "mo:core/Text";
 import Int "mo:core/Int";
 import Nat "mo:core/Nat";
-import Iter "mo:core/Iter";
-import Time "mo:core/Time";
-import Principal "mo:core/Principal";
-import Array "mo:core/Array";
 import Map "mo:core/Map";
+import Array "mo:core/Array";
+import Time "mo:core/Time";
+import Iter "mo:core/Iter";
+import Principal "mo:core/Principal";
 import Runtime "mo:core/Runtime";
-
+import Migration "migration";
 
 import MixinAuthorization "authorization/MixinAuthorization";
 import AccessControl "authorization/access-control";
 
-
+// Apply the data migration
+(with migration = Migration.run)
 actor {
   // Persistent authorization state
   let accessControlState = AccessControl.initState();
@@ -58,14 +59,35 @@ actor {
     messages : [Message];
   };
 
+  // ========== Call Signaling Types ==========
+  public type CallType = { #voice; #video };
+  public type CallStatus = { #ringing; #accepted; #declined; #ended };
+  public type CallSession = {
+    id : Text;
+    callerUsername : Text;
+    calleeUsername : Text;
+    callType : CallType;
+    status : CallStatus;
+    sdpOffer : ?Text;
+    sdpAnswer : ?Text;
+    callerIceCandidates : [Text];
+    calleeIceCandidates : [Text];
+    startedAt : Int;
+    answeredAt : Int;
+    endedAt : Int;
+  };
+
+  // Persistent state
   let users = Map.empty<Text, User>(); // username -> User
   let usersBySerial = Map.empty<Nat, Text>(); // serial -> username
   let principalToUsername = Map.empty<Principal, Text>(); // principal -> username
   let sessionTokenToUsername = Map.empty<Text, Text>(); // token -> username
   let messages = Map.empty<Nat, Message>(); // id -> Message
+  let callSessions = Map.empty<Text, CallSession>(); // callId -> CallSession
 
   var nextSerialNumber = 1;
   var nextMessageId = 1;
+  var nextCallId = 1;
 
   // ====== HELPERS =====
 
@@ -123,6 +145,24 @@ actor {
     };
   };
 
+  // Helper to resolve username from session token (for guest-friendly functions)
+  func resolveUsername(caller : Principal, sessionToken : Text) : Text {
+    switch (sessionTokenToUsername.get(sessionToken)) {
+      case (?username) { username };
+      case (null) {
+        switch (principalToUsername.get(caller)) {
+          case (null) { Runtime.trap("Not logged in") };
+          case (?username) { username };
+        };
+      };
+    };
+  };
+
+  // Helper to check if user is authenticated via session token
+  func isAuthenticatedViaToken(token : Text) : Bool {
+    sessionTokenToUsername.containsKey(token)
+  };
+
   // ===== ACCOUNTS AND AUTH =====
 
   public shared ({ caller }) func registerWithToken(
@@ -132,6 +172,8 @@ actor {
     sessionToken : Text,
   ) : async Nat {
     // Registration is open to all (including guests)
+    // No authorization check needed - anyone can register
+
     if (users.containsKey(username)) {
       Runtime.trap("Username already exists");
     };
@@ -153,11 +195,7 @@ actor {
     usersBySerial.add(serial, username);
     sessionTokenToUsername.add(sessionToken, username);
     principalToUsername.add(caller, username);
-    
-    // Assign user role in AccessControl system
-    // Note: We can't call assignRole here as it requires admin permission
-    // The user will have guest role until an admin upgrades them
-    
+
     serial;
   };
 
@@ -167,6 +205,8 @@ actor {
     sessionToken : Text,
   ) : async UserProfile {
     // Login is open to all (including guests)
+    // No authorization check needed - anyone can attempt login
+
     let user = getUser(username);
 
     if (user.passwordHash != passwordHash) {
@@ -196,32 +236,21 @@ actor {
   };
 
   public shared ({ caller }) func logoutToken(sessionToken : Text) : async () {
-    // Logout is open to all
+    // Logout is open to all - anyone can invalidate a session token
+    // No authorization check needed
+
     if (not sessionTokenToUsername.containsKey(sessionToken)) {
       Runtime.trap("Session token does not exist");
     };
     sessionTokenToUsername.remove(sessionToken);
   };
 
-  func resolveUsername(caller : Principal, sessionToken : Text) : Text {
-    switch (sessionTokenToUsername.get(sessionToken)) {
-      case (?username) { username };
-      case (null) {
-        switch (principalToUsername.get(caller)) {
-          case (null) { Runtime.trap("Not logged in") };
-          case (?username) { username };
-        };
-      };
-    };
-  };
-
   // ===== LEGACY PROFILE FUNCTIONS =====
 
   public query ({ caller }) func getCallerUserProfile() : async ?UserProfile {
-    // Requires user role
+    // Requires user role via AccessControl
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      // Allow fallback to session token system
-      return null;
+      Runtime.trap("Unauthorized: Only users can view profiles");
     };
 
     switch (principalToUsername.get(caller)) {
@@ -257,7 +286,7 @@ actor {
   };
 
   public shared ({ caller }) func saveCallerUserProfile(_ : UserProfile) : async () {
-    // Requires user role
+    // Requires user role via AccessControl
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized: Only users can save profiles");
     };
@@ -289,12 +318,10 @@ actor {
   // ===== MESSAGING =====
 
   public shared ({ caller }) func sendMessageWithToken(recipientUsername : Text, text : Text, token : Text) : async () {
-    // Requires user role or valid session token
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      // Check if they have a valid session token
-      if (not sessionTokenToUsername.containsKey(token)) {
-        Runtime.trap("Unauthorized: Only users can send messages");
-      };
+    // Requires authentication via session token
+    // This is a guest-friendly function that uses session tokens
+    if (not isAuthenticatedViaToken(token)) {
+      Runtime.trap("Unauthorized: Must be logged in to send messages");
     };
 
     let senderUsername = resolveUsername(caller, token);
@@ -320,21 +347,60 @@ actor {
     messages.add(message.id, message);
   };
 
+  public shared ({ caller }) func deleteMessageWithToken(messageId : Nat, token : Text) : async () {
+    // Requires authentication via session token
+    // User can only delete their own messages
+    if (not isAuthenticatedViaToken(token)) {
+      Runtime.trap("Unauthorized: Must be logged in to delete messages");
+    };
+
+    let username = resolveUsername(caller, token);
+
+    switch (messages.get(messageId)) {
+      case (null) { Runtime.trap("Message does not exist") };
+      case (?message) {
+        if (message.senderUsername != username) {
+          Runtime.trap("Can only delete your own messages");
+        };
+        messages.remove(messageId);
+      };
+    };
+  };
+
+  public shared ({ caller }) func removeConversationWithToken(otherUsername : Text, token : Text) : async () {
+    // Requires authentication via session token
+    // User can only remove their own conversations
+    if (not isAuthenticatedViaToken(token)) {
+      Runtime.trap("Unauthorized: Must be logged in to remove conversations");
+    };
+
+    let myUsername = resolveUsername(caller, token);
+
+    let messagesToRemove = messages.entries().toArray().filter(
+      func((_, message)) : Bool {
+        (message.senderUsername == myUsername and message.recipientUsername == otherUsername) or (message.senderUsername == otherUsername and message.recipientUsername == myUsername)
+      }
+    );
+
+    for ((id, _) in messagesToRemove.vals()) {
+      messages.remove(id);
+    };
+  };
+
   public query ({ caller }) func getConversationWithToken(
     otherUsername : Text,
     token : Text,
   ) : async [Message] {
-    // Requires user role or valid session token
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      if (not sessionTokenToUsername.containsKey(token)) {
-        Runtime.trap("Unauthorized: Only users can view conversations");
-      };
+    // Requires authentication via session token
+    // User can only view their own conversations
+    if (not isAuthenticatedViaToken(token)) {
+      Runtime.trap("Unauthorized: Must be logged in to view conversations");
     };
 
     let myUsername = resolveUsername(caller, token);
 
     let conversationMessages = messages.values().toArray().filter(
-      func(message) {
+      func(message) : Bool {
         (message.senderUsername == myUsername and message.recipientUsername == otherUsername) or (message.senderUsername == otherUsername and message.recipientUsername == myUsername)
       }
     );
@@ -345,17 +411,16 @@ actor {
   };
 
   public query ({ caller }) func getAllConversationsWithToken(token : Text) : async [ConversationSummary] {
-    // Requires user role or valid session token
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      if (not sessionTokenToUsername.containsKey(token)) {
-        Runtime.trap("Unauthorized: Only users can view conversations");
-      };
+    // Requires authentication via session token
+    // User can only view their own conversations
+    if (not isAuthenticatedViaToken(token)) {
+      Runtime.trap("Unauthorized: Must be logged in to view conversations");
     };
 
     let myUsername = resolveUsername(caller, token);
 
     let myMessages = messages.values().toArray().filter(
-      func(message) {
+      func(message) : Bool {
         message.senderUsername == myUsername or message.recipientUsername == myUsername
       }
     );
@@ -382,7 +447,7 @@ actor {
     };
 
     let summaries = conversationMap.entries().toArray().map(
-      func((username, lastMessage)) {
+      func((username, lastMessage)) : ConversationSummary {
         { username; lastMessage = ?lastMessage };
       }
     );
@@ -391,11 +456,10 @@ actor {
   };
 
   public shared ({ caller }) func markMessageAsReadWithToken(messageId : Nat, token : Text) : async () {
-    // Requires user role or valid session token
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      if (not sessionTokenToUsername.containsKey(token)) {
-        Runtime.trap("Unauthorized: Only users can mark messages as read");
-      };
+    // Requires authentication via session token
+    // User can only mark messages sent to them as read
+    if (not isAuthenticatedViaToken(token)) {
+      Runtime.trap("Unauthorized: Must be logged in to mark messages as read");
     };
 
     let myUsername = resolveUsername(caller, token);
@@ -415,17 +479,16 @@ actor {
   };
 
   public query ({ caller }) func getUnreadMessageCountWithToken(token : Text) : async Nat {
-    // Requires user role or valid session token
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      if (not sessionTokenToUsername.containsKey(token)) {
-        Runtime.trap("Unauthorized: Only users can view unread count");
-      };
+    // Requires authentication via session token
+    // User can only view their own unread count
+    if (not isAuthenticatedViaToken(token)) {
+      Runtime.trap("Unauthorized: Must be logged in to view unread count");
     };
 
     let myUsername = resolveUsername(caller, token);
 
     let unreadMessages = messages.values().toArray().filter(
-      func(message) {
+      func(message) : Bool {
         message.recipientUsername == myUsername and not message.isRead
       }
     );
@@ -434,17 +497,16 @@ actor {
   };
 
   public query ({ caller }) func getLatestUnreadMessageSenderWithToken(token : Text) : async ?Text {
-    // Requires user role or valid session token
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      if (not sessionTokenToUsername.containsKey(token)) {
-        Runtime.trap("Unauthorized: Only users can view unread messages");
-      };
+    // Requires authentication via session token
+    // User can only view their own unread messages
+    if (not isAuthenticatedViaToken(token)) {
+      Runtime.trap("Unauthorized: Must be logged in to view unread messages");
     };
 
     let myUsername = resolveUsername(caller, token);
 
     let unreadMessages = messages.values().toArray().filter(
-      func(message) {
+      func(message) : Bool {
         message.recipientUsername == myUsername and not message.isRead
       }
     );
@@ -463,11 +525,10 @@ actor {
   // ===== MYBUCKS =====
 
   public query ({ caller }) func getMyBucksBalanceWithToken(token : Text) : async Nat {
-    // Requires user role or valid session token
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      if (not sessionTokenToUsername.containsKey(token)) {
-        Runtime.trap("Unauthorized: Only users can view balance");
-      };
+    // Requires authentication via session token
+    // User can only view their own balance
+    if (not isAuthenticatedViaToken(token)) {
+      Runtime.trap("Unauthorized: Must be logged in to view balance");
     };
 
     let myUsername = resolveUsername(caller, token);
@@ -481,11 +542,10 @@ actor {
     newDisplayName : Text,
     token : Text,
   ) : async () {
-    // Requires user role or valid session token
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      if (not sessionTokenToUsername.containsKey(token)) {
-        Runtime.trap("Unauthorized: Only users can update display name");
-      };
+    // Requires authentication via session token
+    // User can only update their own display name
+    if (not isAuthenticatedViaToken(token)) {
+      Runtime.trap("Unauthorized: Must be logged in to update display name");
     };
 
     let myUsername = resolveUsername(caller, token);
@@ -516,11 +576,10 @@ actor {
     newPasswordHash : Text,
     token : Text,
   ) : async () {
-    // Requires user role or valid session token
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      if (not sessionTokenToUsername.containsKey(token)) {
-        Runtime.trap("Unauthorized: Only users can update password");
-      };
+    // Requires authentication via session token
+    // User can only update their own password
+    if (not isAuthenticatedViaToken(token)) {
+      Runtime.trap("Unauthorized: Must be logged in to update password");
     };
 
     let myUsername = resolveUsername(caller, token);
@@ -540,11 +599,10 @@ actor {
     newUsername : Text,
     token : Text,
   ) : async () {
-    // Requires user role or valid session token
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      if (not sessionTokenToUsername.containsKey(token)) {
-        Runtime.trap("Unauthorized: Only users can update username");
-      };
+    // Requires authentication via session token
+    // User can only update their own username
+    if (not isAuthenticatedViaToken(token)) {
+      Runtime.trap("Unauthorized: Must be logged in to update username");
     };
 
     let oldUsername = resolveUsername(caller, token);
@@ -618,7 +676,7 @@ actor {
 
     // Delete all messages involving this user
     let messagesToDelete = messages.entries().toArray().filter(
-      func((id, message)) {
+      func((id, message)) : Bool {
         message.senderUsername == user.username or message.recipientUsername == user.username
       }
     );
@@ -633,7 +691,7 @@ actor {
 
     // Clean up session tokens
     let tokensToDelete = sessionTokenToUsername.entries().toArray().filter(
-      func((token, username)) { username == user.username }
+      func((token, username)) : Bool { username == user.username }
     );
 
     for ((token, _) in tokensToDelete.vals()) {
@@ -642,7 +700,7 @@ actor {
 
     // Clean up principal mapping
     let principalsToDelete = principalToUsername.entries().toArray().filter(
-      func((p, username)) { username == user.username }
+      func((p, username)) : Bool { username == user.username }
     );
 
     for ((p, _) in principalsToDelete.vals()) {
@@ -679,5 +737,265 @@ actor {
       banExpiryTimestamp = 0;
     };
     users.add(user.username, updatedUser);
+  };
+
+  // ========== CALL SIGNALING FUNCTIONS ==========
+
+  // 1. Initiate Call
+  public shared ({ caller }) func initiateCallWithToken(
+    calleeUsername : Text,
+    callType : CallType,
+    token : Text,
+  ) : async Text {
+    if (not isAuthenticatedViaToken(token)) {
+      Runtime.trap("Unauthorized: Must be logged in to initiate call");
+    };
+
+    let callerUsername = resolveUsername(caller, token);
+
+    if (callerUsername == calleeUsername) {
+      Runtime.trap("Cannot call yourself");
+    };
+
+    if (not users.containsKey(calleeUsername)) {
+      Runtime.trap("Callee does not exist");
+    };
+
+    let newCallId = nextCallId.toText();
+    nextCallId += 1;
+
+    // Cancel existing ringing calls from this caller (set status to ended)
+    for ((_, call) in callSessions.entries()) {
+      if (call.callerUsername == callerUsername and call.status == #ringing) {
+        let updatedCall = {
+          call with
+          status = #ended;
+          endedAt = Time.now();
+        };
+        callSessions.add(call.id, updatedCall);
+      };
+    };
+
+    let newCallSession : CallSession = {
+      id = newCallId;
+      callerUsername;
+      calleeUsername;
+      callType;
+      status = #ringing;
+      sdpOffer = null;
+      sdpAnswer = null;
+      callerIceCandidates = [];
+      calleeIceCandidates = [];
+      startedAt = Time.now();
+      answeredAt = 0;
+      endedAt = 0;
+    };
+
+    callSessions.add(newCallId, newCallSession);
+    newCallId;
+  };
+
+  // 2. Answer Call
+  public shared ({ caller }) func answerCallWithToken(callId : Text, token : Text) : async () {
+    if (not isAuthenticatedViaToken(token)) {
+      Runtime.trap("Unauthorized: Must be logged in to answer call");
+    };
+
+    let myUsername = resolveUsername(caller, token);
+
+    switch (callSessions.get(callId)) {
+      case (null) { Runtime.trap("Call does not exist") };
+      case (?call) {
+        if (call.calleeUsername != myUsername) {
+          Runtime.trap("Unauthorized: Can only answer calls for yourself");
+        };
+        if (call.status != #ringing) {
+          Runtime.trap("Call must be in ringing state");
+        };
+
+        let updatedCall = {
+          call with
+          status = #accepted;
+          answeredAt = Time.now();
+        };
+        callSessions.add(callId, updatedCall);
+      };
+    };
+  };
+
+  // 3. Decline Call
+  public shared ({ caller }) func declineCallWithToken(callId : Text, token : Text) : async () {
+    if (not isAuthenticatedViaToken(token)) {
+      Runtime.trap("Unauthorized: Must be logged in to decline call");
+    };
+
+    let myUsername = resolveUsername(caller, token);
+
+    switch (callSessions.get(callId)) {
+      case (null) { Runtime.trap("Call does not exist") };
+      case (?call) {
+        if (call.calleeUsername != myUsername and call.callerUsername != myUsername) {
+          Runtime.trap("Unauthorized: Can only decline your own calls");
+        };
+
+        if (call.status == #ended or call.status == #declined) {
+          Runtime.trap("Call is already ended or declined");
+        };
+
+        let updatedCall = {
+          call with
+          status = #declined;
+          endedAt = Time.now();
+        };
+        callSessions.add(callId, updatedCall);
+      };
+    };
+  };
+
+  // 4. End Call
+  public shared ({ caller }) func endCallWithToken(callId : Text, token : Text) : async () {
+    if (not isAuthenticatedViaToken(token)) {
+      Runtime.trap("Unauthorized: Must be logged in to end call");
+    };
+
+    let myUsername = resolveUsername(caller, token);
+
+    switch (callSessions.get(callId)) {
+      case (null) { Runtime.trap("Call does not exist") };
+      case (?call) {
+        if (call.calleeUsername != myUsername and call.callerUsername != myUsername) {
+          Runtime.trap("Unauthorized: Can only end your own calls");
+        };
+
+        if (call.status == #ended) {
+          Runtime.trap("Call is already ended");
+        };
+
+        let updatedCall = {
+          call with
+          status = #ended;
+          endedAt = Time.now();
+        };
+        callSessions.add(callId, updatedCall);
+      };
+    };
+  };
+
+  // 5. Get Call Session
+  public query ({ caller }) func getCallSessionWithToken(callId : Text, token : Text) : async ?CallSession {
+    if (not isAuthenticatedViaToken(token)) {
+      return null;
+    };
+
+    let myUsername = resolveUsername(caller, token);
+
+    switch (callSessions.get(callId)) {
+      case (null) { null };
+      case (?call) {
+        // Only return call session if user is a participant
+        if (call.callerUsername == myUsername or call.calleeUsername == myUsername) {
+          ?call;
+        } else {
+          null;
+        };
+      };
+    };
+  };
+
+  // 6. Get Incoming Call
+  public query ({ caller }) func getIncomingCallWithToken(token : Text) : async ?CallSession {
+    if (not isAuthenticatedViaToken(token)) {
+      return null;
+    };
+
+    let myUsername = resolveUsername(caller, token);
+
+    let incomingCalls = callSessions.values().toArray().filter(
+      func(call) { call.calleeUsername == myUsername and call.status == #ringing }
+    ).sort(
+      func(a, b) { Int.compare(b.startedAt, a.startedAt) }
+    );
+
+    if (incomingCalls.size() > 0) {
+      ?incomingCalls[0];
+    } else {
+      null;
+    };
+  };
+
+  // 7. Send SDP Offer
+  public shared ({ caller }) func sendSdpOfferWithToken(callId : Text, sdp : Text, token : Text) : async () {
+    if (not isAuthenticatedViaToken(token)) {
+      Runtime.trap("Unauthorized: Must be logged in to send sdp");
+    };
+
+    let myUsername = resolveUsername(caller, token);
+
+    switch (callSessions.get(callId)) {
+      case (null) { Runtime.trap("Call does not exist") };
+      case (?call) {
+        if (call.callerUsername != myUsername) {
+          Runtime.trap("Unauthorized: Only the caller can send SDP offer");
+        };
+
+        let updatedCall = { call with sdpOffer = ?sdp };
+        callSessions.add(callId, updatedCall);
+      };
+    };
+  };
+
+  // 8. Send SDP Answer
+  public shared ({ caller }) func sendSdpAnswerWithToken(callId : Text, sdp : Text, token : Text) : async () {
+    if (not isAuthenticatedViaToken(token)) {
+      Runtime.trap("Unauthorized: Must be logged in to send sdp");
+    };
+
+    let myUsername = resolveUsername(caller, token);
+
+    switch (callSessions.get(callId)) {
+      case (null) { Runtime.trap("Call does not exist") };
+      case (?call) {
+        if (call.calleeUsername != myUsername) {
+          Runtime.trap("Unauthorized: Only the callee can send SDP answer");
+        };
+
+        let updatedCall = { call with sdpAnswer = ?sdp };
+        callSessions.add(callId, updatedCall);
+      };
+    };
+  };
+
+  // 9. Add ICE Candidate
+  public shared ({ caller }) func addIceCandidateWithToken(
+    callId : Text,
+    candidate : Text,
+    token : Text,
+  ) : async () {
+    if (not isAuthenticatedViaToken(token)) {
+      Runtime.trap("Unauthorized: Must be logged in to add ice candidate");
+    };
+
+    let myUsername = resolveUsername(caller, token);
+
+    switch (callSessions.get(callId)) {
+      case (null) { Runtime.trap("Call does not exist") };
+      case (?call) {
+        if (call.callerUsername == myUsername) {
+          // Add to caller ice candidates
+          let updatedCall = {
+            call with callerIceCandidates = call.callerIceCandidates.concat([candidate]);
+          };
+          callSessions.add(callId, updatedCall);
+        } else if (call.calleeUsername == myUsername) {
+          // Add to callee ice candidates
+          let updatedCall = {
+            call with calleeIceCandidates = call.calleeIceCandidates.concat([candidate]);
+          };
+          callSessions.add(callId, updatedCall);
+        } else {
+          Runtime.trap("Unauthorized: Can only add ice candidates for your calls");
+        };
+      };
+    };
   };
 };

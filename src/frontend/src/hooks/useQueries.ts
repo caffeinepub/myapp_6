@@ -130,3 +130,39 @@ export function useMarkAsRead() {
     },
   });
 }
+
+export function useDeleteMessage() {
+  const { actor } = useActor();
+  const { sessionToken } = useApp();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (messageId: bigint) => {
+      if (!actor) throw new Error("Not connected");
+      await actor.deleteMessageWithToken(messageId, sessionToken);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["conversation"] });
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+    },
+  });
+}
+
+export function useRemoveConversation() {
+  const { actor } = useActor();
+  const { sessionToken } = useApp();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (otherUsername: string) => {
+      if (!actor) throw new Error("Not connected");
+      await actor.removeConversationWithToken(otherUsername, sessionToken);
+    },
+    onSuccess: (_, otherUsername) => {
+      queryClient.invalidateQueries({
+        queryKey: ["conversation", otherUsername],
+      });
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+    },
+  });
+}

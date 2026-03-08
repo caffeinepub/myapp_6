@@ -25,6 +25,27 @@ export const ConversationSummary = IDL.Record({
   'username' : IDL.Text,
   'lastMessage' : IDL.Opt(Message),
 });
+export const CallStatus = IDL.Variant({
+  'ringing' : IDL.Null,
+  'ended' : IDL.Null,
+  'accepted' : IDL.Null,
+  'declined' : IDL.Null,
+});
+export const CallType = IDL.Variant({ 'video' : IDL.Null, 'voice' : IDL.Null });
+export const CallSession = IDL.Record({
+  'id' : IDL.Text,
+  'status' : CallStatus,
+  'startedAt' : IDL.Int,
+  'endedAt' : IDL.Int,
+  'callType' : CallType,
+  'sdpOffer' : IDL.Opt(IDL.Text),
+  'callerUsername' : IDL.Text,
+  'callerIceCandidates' : IDL.Vec(IDL.Text),
+  'answeredAt' : IDL.Int,
+  'calleeIceCandidates' : IDL.Vec(IDL.Text),
+  'calleeUsername' : IDL.Text,
+  'sdpAnswer' : IDL.Opt(IDL.Text),
+});
 export const UserProfile = IDL.Record({
   'username' : IDL.Text,
   'displayName' : IDL.Text,
@@ -36,12 +57,22 @@ export const UserProfile = IDL.Record({
 
 export const idlService = IDL.Service({
   '_initializeAccessControlWithSecret' : IDL.Func([IDL.Text], [], []),
+  'addIceCandidateWithToken' : IDL.Func([IDL.Text, IDL.Text, IDL.Text], [], []),
+  'answerCallWithToken' : IDL.Func([IDL.Text, IDL.Text], [], []),
   'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
   'banWithToken' : IDL.Func([IDL.Nat, IDL.Nat, IDL.Text], [], []),
+  'declineCallWithToken' : IDL.Func([IDL.Text, IDL.Text], [], []),
+  'deleteMessageWithToken' : IDL.Func([IDL.Nat, IDL.Text], [], []),
+  'endCallWithToken' : IDL.Func([IDL.Text, IDL.Text], [], []),
   'enhanceWithToken' : IDL.Func([IDL.Nat, IDL.Nat, IDL.Text], [], []),
   'getAllConversationsWithToken' : IDL.Func(
       [IDL.Text],
       [IDL.Vec(ConversationSummary)],
+      ['query'],
+    ),
+  'getCallSessionWithToken' : IDL.Func(
+      [IDL.Text, IDL.Text],
+      [IDL.Opt(CallSession)],
       ['query'],
     ),
   'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
@@ -49,6 +80,11 @@ export const idlService = IDL.Service({
   'getConversationWithToken' : IDL.Func(
       [IDL.Text, IDL.Text],
       [IDL.Vec(Message)],
+      ['query'],
+    ),
+  'getIncomingCallWithToken' : IDL.Func(
+      [IDL.Text],
+      [IDL.Opt(CallSession)],
       ['query'],
     ),
   'getLatestUnreadMessageSenderWithToken' : IDL.Func(
@@ -64,6 +100,11 @@ export const idlService = IDL.Service({
       ['query'],
     ),
   'getUserProfileByUsername' : IDL.Func([IDL.Text], [UserProfile], ['query']),
+  'initiateCallWithToken' : IDL.Func(
+      [IDL.Text, CallType, IDL.Text],
+      [IDL.Text],
+      [],
+    ),
   'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
   'loginWithToken' : IDL.Func(
       [IDL.Text, IDL.Text, IDL.Text],
@@ -77,6 +118,7 @@ export const idlService = IDL.Service({
       [IDL.Nat],
       [],
     ),
+  'removeConversationWithToken' : IDL.Func([IDL.Text, IDL.Text], [], []),
   'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
   'searchBySerial' : IDL.Func(
       [IDL.Nat],
@@ -84,6 +126,8 @@ export const idlService = IDL.Service({
       ['query'],
     ),
   'sendMessageWithToken' : IDL.Func([IDL.Text, IDL.Text, IDL.Text], [], []),
+  'sendSdpAnswerWithToken' : IDL.Func([IDL.Text, IDL.Text, IDL.Text], [], []),
+  'sendSdpOfferWithToken' : IDL.Func([IDL.Text, IDL.Text, IDL.Text], [], []),
   'terminateWithToken' : IDL.Func([IDL.Nat, IDL.Text], [], []),
   'unbanWithToken' : IDL.Func([IDL.Nat, IDL.Text], [], []),
   'updateDisplayNameWithToken' : IDL.Func([IDL.Text, IDL.Text], [], []),
@@ -111,6 +155,27 @@ export const idlFactory = ({ IDL }) => {
     'username' : IDL.Text,
     'lastMessage' : IDL.Opt(Message),
   });
+  const CallStatus = IDL.Variant({
+    'ringing' : IDL.Null,
+    'ended' : IDL.Null,
+    'accepted' : IDL.Null,
+    'declined' : IDL.Null,
+  });
+  const CallType = IDL.Variant({ 'video' : IDL.Null, 'voice' : IDL.Null });
+  const CallSession = IDL.Record({
+    'id' : IDL.Text,
+    'status' : CallStatus,
+    'startedAt' : IDL.Int,
+    'endedAt' : IDL.Int,
+    'callType' : CallType,
+    'sdpOffer' : IDL.Opt(IDL.Text),
+    'callerUsername' : IDL.Text,
+    'callerIceCandidates' : IDL.Vec(IDL.Text),
+    'answeredAt' : IDL.Int,
+    'calleeIceCandidates' : IDL.Vec(IDL.Text),
+    'calleeUsername' : IDL.Text,
+    'sdpAnswer' : IDL.Opt(IDL.Text),
+  });
   const UserProfile = IDL.Record({
     'username' : IDL.Text,
     'displayName' : IDL.Text,
@@ -122,12 +187,26 @@ export const idlFactory = ({ IDL }) => {
   
   return IDL.Service({
     '_initializeAccessControlWithSecret' : IDL.Func([IDL.Text], [], []),
+    'addIceCandidateWithToken' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text],
+        [],
+        [],
+      ),
+    'answerCallWithToken' : IDL.Func([IDL.Text, IDL.Text], [], []),
     'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
     'banWithToken' : IDL.Func([IDL.Nat, IDL.Nat, IDL.Text], [], []),
+    'declineCallWithToken' : IDL.Func([IDL.Text, IDL.Text], [], []),
+    'deleteMessageWithToken' : IDL.Func([IDL.Nat, IDL.Text], [], []),
+    'endCallWithToken' : IDL.Func([IDL.Text, IDL.Text], [], []),
     'enhanceWithToken' : IDL.Func([IDL.Nat, IDL.Nat, IDL.Text], [], []),
     'getAllConversationsWithToken' : IDL.Func(
         [IDL.Text],
         [IDL.Vec(ConversationSummary)],
+        ['query'],
+      ),
+    'getCallSessionWithToken' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Opt(CallSession)],
         ['query'],
       ),
     'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
@@ -135,6 +214,11 @@ export const idlFactory = ({ IDL }) => {
     'getConversationWithToken' : IDL.Func(
         [IDL.Text, IDL.Text],
         [IDL.Vec(Message)],
+        ['query'],
+      ),
+    'getIncomingCallWithToken' : IDL.Func(
+        [IDL.Text],
+        [IDL.Opt(CallSession)],
         ['query'],
       ),
     'getLatestUnreadMessageSenderWithToken' : IDL.Func(
@@ -154,6 +238,11 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'getUserProfileByUsername' : IDL.Func([IDL.Text], [UserProfile], ['query']),
+    'initiateCallWithToken' : IDL.Func(
+        [IDL.Text, CallType, IDL.Text],
+        [IDL.Text],
+        [],
+      ),
     'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
     'loginWithToken' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Text],
@@ -167,6 +256,7 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Nat],
         [],
       ),
+    'removeConversationWithToken' : IDL.Func([IDL.Text, IDL.Text], [], []),
     'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
     'searchBySerial' : IDL.Func(
         [IDL.Nat],
@@ -174,6 +264,8 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'sendMessageWithToken' : IDL.Func([IDL.Text, IDL.Text, IDL.Text], [], []),
+    'sendSdpAnswerWithToken' : IDL.Func([IDL.Text, IDL.Text, IDL.Text], [], []),
+    'sendSdpOfferWithToken' : IDL.Func([IDL.Text, IDL.Text, IDL.Text], [], []),
     'terminateWithToken' : IDL.Func([IDL.Nat, IDL.Text], [], []),
     'unbanWithToken' : IDL.Func([IDL.Nat, IDL.Text], [], []),
     'updateDisplayNameWithToken' : IDL.Func([IDL.Text, IDL.Text], [], []),

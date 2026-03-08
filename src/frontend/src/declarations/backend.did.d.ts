@@ -10,6 +10,26 @@ import type { ActorMethod } from '@icp-sdk/core/agent';
 import type { IDL } from '@icp-sdk/core/candid';
 import type { Principal } from '@icp-sdk/core/principal';
 
+export interface CallSession {
+  'id' : string,
+  'status' : CallStatus,
+  'startedAt' : bigint,
+  'endedAt' : bigint,
+  'callType' : CallType,
+  'sdpOffer' : [] | [string],
+  'callerUsername' : string,
+  'callerIceCandidates' : Array<string>,
+  'answeredAt' : bigint,
+  'calleeIceCandidates' : Array<string>,
+  'calleeUsername' : string,
+  'sdpAnswer' : [] | [string],
+}
+export type CallStatus = { 'ringing' : null } |
+  { 'ended' : null } |
+  { 'accepted' : null } |
+  { 'declined' : null };
+export type CallType = { 'video' : null } |
+  { 'voice' : null };
 export interface ConversationSummary {
   'username' : string,
   'lastMessage' : [] | [Message],
@@ -35,16 +55,23 @@ export type UserRole = { 'admin' : null } |
   { 'guest' : null };
 export interface _SERVICE {
   '_initializeAccessControlWithSecret' : ActorMethod<[string], undefined>,
+  'addIceCandidateWithToken' : ActorMethod<[string, string, string], undefined>,
+  'answerCallWithToken' : ActorMethod<[string, string], undefined>,
   'assignCallerUserRole' : ActorMethod<[Principal, UserRole], undefined>,
   'banWithToken' : ActorMethod<[bigint, bigint, string], undefined>,
+  'declineCallWithToken' : ActorMethod<[string, string], undefined>,
+  'deleteMessageWithToken' : ActorMethod<[bigint, string], undefined>,
+  'endCallWithToken' : ActorMethod<[string, string], undefined>,
   'enhanceWithToken' : ActorMethod<[bigint, bigint, string], undefined>,
   'getAllConversationsWithToken' : ActorMethod<
     [string],
     Array<ConversationSummary>
   >,
+  'getCallSessionWithToken' : ActorMethod<[string, string], [] | [CallSession]>,
   'getCallerUserProfile' : ActorMethod<[], [] | [UserProfile]>,
   'getCallerUserRole' : ActorMethod<[], UserRole>,
   'getConversationWithToken' : ActorMethod<[string, string], Array<Message>>,
+  'getIncomingCallWithToken' : ActorMethod<[string], [] | [CallSession]>,
   'getLatestUnreadMessageSenderWithToken' : ActorMethod<
     [string],
     [] | [string]
@@ -53,17 +80,21 @@ export interface _SERVICE {
   'getUnreadMessageCountWithToken' : ActorMethod<[string], bigint>,
   'getUserProfile' : ActorMethod<[Principal], [] | [UserProfile]>,
   'getUserProfileByUsername' : ActorMethod<[string], UserProfile>,
+  'initiateCallWithToken' : ActorMethod<[string, CallType, string], string>,
   'isCallerAdmin' : ActorMethod<[], boolean>,
   'loginWithToken' : ActorMethod<[string, string, string], UserProfile>,
   'logoutToken' : ActorMethod<[string], undefined>,
   'markMessageAsReadWithToken' : ActorMethod<[bigint, string], undefined>,
   'registerWithToken' : ActorMethod<[string, string, string, string], bigint>,
+  'removeConversationWithToken' : ActorMethod<[string, string], undefined>,
   'saveCallerUserProfile' : ActorMethod<[UserProfile], undefined>,
   'searchBySerial' : ActorMethod<
     [bigint],
     { 'username' : string, 'displayName' : string }
   >,
   'sendMessageWithToken' : ActorMethod<[string, string, string], undefined>,
+  'sendSdpAnswerWithToken' : ActorMethod<[string, string, string], undefined>,
+  'sendSdpOfferWithToken' : ActorMethod<[string, string, string], undefined>,
   'terminateWithToken' : ActorMethod<[bigint, string], undefined>,
   'unbanWithToken' : ActorMethod<[bigint, string], undefined>,
   'updateDisplayNameWithToken' : ActorMethod<[string, string], undefined>,

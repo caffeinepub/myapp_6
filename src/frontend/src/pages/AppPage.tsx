@@ -3,19 +3,22 @@ import { Toaster } from "@/components/ui/sonner";
 import { LogOut, MessageSquare, Settings, ShieldAlert } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useState } from "react";
+import ActiveCallScreen from "../components/ActiveCallScreen";
 import AdminPanel from "../components/AdminPanel";
 import ChatView from "../components/ChatView";
 import ConversationList from "../components/ConversationList";
+import IncomingCallScreen from "../components/IncomingCallScreen";
 import MyBucksPill from "../components/MyBucksPill";
 import NotificationBell from "../components/NotificationBell";
 import SearchBar from "../components/SearchBar";
 import SettingsModal from "../components/SettingsModal";
 import { useApp } from "../context/AppContext";
+import { CallProvider, useCall } from "../context/CallContext";
 import { useIsMobile } from "../hooks/use-mobile";
 import { useActor } from "../hooks/useActor";
 import { formatSerial } from "../utils/crypto";
 
-export default function AppPage() {
+function AppPageInner() {
   const { currentUser, logout } = useApp();
   const { actor } = useActor();
   const isMobile = useIsMobile();
@@ -23,6 +26,22 @@ export default function AppPage() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
   const isAdmin = currentUser?.username === "Ayaan";
+
+  const {
+    callPhase,
+    callType,
+    partnerUsername: callPartner,
+    localStream,
+    remoteStream,
+    callDurationSeconds,
+    answerCall,
+    declineCall,
+    endCall,
+    toggleSpeaker,
+    toggleMute,
+    isSpeakerOn,
+    isMuted,
+  } = useCall();
 
   // On mobile, track whether we're showing the sidebar or the chat
   const showSidebar = !isMobile || activeChat === null;
@@ -34,6 +53,12 @@ export default function AppPage() {
 
   const handleBackToList = () => {
     setActiveChat(null);
+  };
+
+  const handleRemoveConversation = (username: string) => {
+    if (activeChat === username) {
+      setActiveChat(null);
+    }
   };
 
   const handleLogout = () => {
@@ -152,6 +177,7 @@ export default function AppPage() {
                 <ConversationList
                   activeUsername={activeChat}
                   onSelect={handleSelectChat}
+                  onRemove={handleRemoveConversation}
                 />
               </motion.aside>
             )}
@@ -186,6 +212,40 @@ export default function AppPage() {
         onClose={() => setSettingsOpen(false)}
       />
       <AdminPanel open={adminOpen} onClose={() => setAdminOpen(false)} />
+
+      {/* Incoming call overlay */}
+      {callPhase === "incoming_ringing" && callPartner && callType && (
+        <IncomingCallScreen
+          callerUsername={callPartner}
+          callType={callType}
+          onAccept={answerCall}
+          onDecline={declineCall}
+        />
+      )}
+
+      {/* Active call overlay */}
+      {callPhase === "active" && callPartner && callType && (
+        <ActiveCallScreen
+          callType={callType}
+          partnerUsername={callPartner}
+          localStream={localStream}
+          remoteStream={remoteStream}
+          callDurationSeconds={callDurationSeconds}
+          onEnd={endCall}
+          onToggleSpeaker={toggleSpeaker}
+          onToggleMute={toggleMute}
+          isSpeakerOn={isSpeakerOn}
+          isMuted={isMuted}
+        />
+      )}
     </>
+  );
+}
+
+export default function AppPage() {
+  return (
+    <CallProvider>
+      <AppPageInner />
+    </CallProvider>
   );
 }

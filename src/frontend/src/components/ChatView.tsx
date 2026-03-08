@@ -2,17 +2,28 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowLeft, Loader2, MessageSquare, Send } from "lucide-react";
+import {
+  ArrowLeft,
+  Loader2,
+  MessageSquare,
+  Phone,
+  Send,
+  Trash2,
+} from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import type { CallType } from "../backend.d";
 import { useApp } from "../context/AppContext";
+import { useCall } from "../context/CallContext";
 import {
   useConversation,
+  useDeleteMessage,
   useMarkAsRead,
   useSendMessage,
 } from "../hooks/useQueries";
 import { formatTimestamp } from "../utils/crypto";
+import CallTypeModal from "./CallTypeModal";
 
 interface ChatViewProps {
   partnerUsername: string | null;
@@ -21,11 +32,35 @@ interface ChatViewProps {
 
 export default function ChatView({ partnerUsername, onBack }: ChatViewProps) {
   const { currentUser } = useApp();
+  const { initiateCall, callPhase } = useCall();
   const { data: messages, isLoading } = useConversation(partnerUsername);
   const sendMessage = useSendMessage();
   const markAsRead = useMarkAsRead();
+  const deleteMessage = useDeleteMessage();
   const [text, setText] = useState("");
+  const [callModalOpen, setCallModalOpen] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  const handleCallSelect = async (type: CallType) => {
+    setCallModalOpen(false);
+    if (!partnerUsername) return;
+    try {
+      await initiateCall(partnerUsername, type);
+    } catch {
+      toast.error(
+        "Could not start call. Make sure microphone access is allowed.",
+      );
+    }
+  };
+
+  const handleDeleteMessage = async (messageId: bigint) => {
+    try {
+      await deleteMessage.mutateAsync(messageId);
+      toast.success("Message deleted");
+    } catch {
+      toast.error("Failed to delete message");
+    }
+  };
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -103,7 +138,29 @@ export default function ChatView({ partnerUsername, onBack }: ChatViewProps) {
             {isLoading ? "Loading…" : `${messages?.length ?? 0} messages`}
           </div>
         </div>
+        {/* Call button */}
+        <Button
+          data-ocid="chat.call_button"
+          variant="ghost"
+          size="icon"
+          disabled={callPhase !== "idle"}
+          onClick={() => setCallModalOpen(true)}
+          className="h-8 w-8 flex-shrink-0 text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-colors"
+          aria-label="Start a call"
+        >
+          <Phone className="w-4 h-4" />
+        </Button>
       </div>
+
+      {/* Call type selection modal */}
+      {partnerUsername && (
+        <CallTypeModal
+          open={callModalOpen}
+          onClose={() => setCallModalOpen(false)}
+          onSelect={handleCallSelect}
+          partnerUsername={partnerUsername}
+        />
+      )}
 
       {/* Messages */}
       <ScrollArea className="flex-1 px-3 py-3 sm:px-4 sm:py-4">
@@ -154,8 +211,20 @@ export default function ChatView({ partnerUsername, onBack }: ChatViewProps) {
                       </div>
                     )}
                     <div
-                      className={`flex ${isMine ? "justify-end" : "justify-start"}`}
+                      className={`group flex items-center gap-1.5 ${isMine ? "justify-end" : "justify-start"}`}
                     >
+                      {isMine && (
+                        <button
+                          type="button"
+                          data-ocid={`chat.message_delete_button.${i + 1}`}
+                          onClick={() => handleDeleteMessage(msg.id)}
+                          disabled={deleteMessage.isPending}
+                          aria-label="Delete message"
+                          className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity p-1 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 flex-shrink-0 touch-manipulation"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                       <div
                         className={`max-w-[80%] sm:max-w-[70%] px-3.5 py-2 text-sm ${
                           isMine ? "msg-bubble-sent" : "msg-bubble-recv"
