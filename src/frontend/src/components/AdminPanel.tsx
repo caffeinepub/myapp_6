@@ -628,7 +628,7 @@ export default function AdminPanel({ open, onClose }: AdminPanelProps) {
         </div>
 
         {/* User List */}
-        <ScrollArea className="flex-1">
+        <div className="flex-1 overflow-y-auto min-h-0">
           <div className="p-6 space-y-4">
             {detonationLoading ? (
               <div
@@ -821,7 +821,7 @@ export default function AdminPanel({ open, onClose }: AdminPanelProps) {
               ))
             )}
           </div>
-        </ScrollArea>
+        </div>
       </div>
     );
   }
@@ -859,7 +859,7 @@ export default function AdminPanel({ open, onClose }: AdminPanelProps) {
       </div>
 
       {/* Content */}
-      <ScrollArea className="flex-1">
+      <div className="flex-1 overflow-y-auto min-h-0">
         <div className="p-8 grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl">
           {/* Enhance Box */}
           <div className="bg-gray-50 rounded-2xl p-6 border border-gray-200 h-fit">
@@ -1097,7 +1097,7 @@ export default function AdminPanel({ open, onClose }: AdminPanelProps) {
             </div>
           </div>
         </div>
-      </ScrollArea>
+      </div>
     </div>
   );
 }
